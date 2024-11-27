@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
@@ -45,6 +46,7 @@ class EmojiButtonManager(
     private var initialScaleY: Float = 1f
 
     init {
+        Log.d("EmojiButtonManager", "init")
         emojiButtons = List(5) { index ->
             Button(context).apply {
                 setBackgroundResource(
@@ -198,6 +200,7 @@ class EmojiButtonManager(
                 topView = child
             }
         }
+        Log.d("EmojiButtonManager", "Top child view: ${topView?.tag}")
         return topView
     }
 
@@ -224,11 +227,19 @@ class EmojiButtonManager(
             setBackgroundColor(context.resources.getColor(R.color.transparent))
             tag = if (emojiResId == R.drawable.ic_devil) "ic_devil" else "emoji"
 
+            // Bring the emoji to front as soon as it's created
+            bringToFront() // Move it to the front before adding to the layout
+            z = 6f // Ensure it's on top in terms of z-index
+
+            // Log the view being brought to the front
+            Log.d("EmojiButtonManager", "Bringing to front1: ${this.tag}")
+
             setOnTouchListener { v, event ->
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         v.bringToFront()
                         v.z = 6f
+                        Log.d("EmojiButtonManager", "Bringing to front2: ${v.tag}")
                         v.requestLayout()
                         v.invalidate()
                         true
