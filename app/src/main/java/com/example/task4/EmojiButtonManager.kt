@@ -194,15 +194,21 @@ class EmojiButtonManager(
 
     private fun getTopChildView(): View? {
         var topView: View? = null
+        var maxZIndex = -Float.MAX_VALUE // Start with a very low value to find the top view
+
         for (i in 0 until mainLayout.childCount) {
             val child = mainLayout.getChildAt(i)
-            if (topView == null || child.z > topView.z) {
+            // Compare the actual z-index of each child
+            if (child.z > maxZIndex) {
                 topView = child
+                maxZIndex = child.z
             }
         }
+
         Log.d("EmojiButtonManager", "Top child view: ${topView?.tag}")
         return topView
     }
+
 
     private fun calculateDistance(point1: Pair<Float, Float>, point2: Pair<Float, Float>): Float {
         return sqrt((point2.first - point1.first).pow(2) + (point2.second - point1.second).pow(2))
@@ -219,13 +225,22 @@ class EmojiButtonManager(
             else -> return
         }
 
+        val emojiTag = when (index) {
+            0 -> "ic_green"
+            1 -> "ic_grin"
+            2 -> "ic_smile"
+            3 -> "ic_tongue"
+            4 -> "ic_blue"
+            else -> "unknown" // на случай, если индекс будет выходить за пределы
+        }
+
         currentEmojiImageView = ImageView(context).apply {
             setImageResource(emojiResId)
             layoutParams = FrameLayout.LayoutParams(160, 160).apply {
                 gravity = android.view.Gravity.CENTER
             }
             setBackgroundColor(context.resources.getColor(R.color.transparent))
-            tag = if (emojiResId == R.drawable.ic_devil) "ic_devil" else "emoji"
+            tag = emojiTag
 
             // Bring the emoji to front as soon as it's created
             bringToFront() // Move it to the front before adding to the layout
@@ -242,6 +257,10 @@ class EmojiButtonManager(
                         Log.d("EmojiButtonManager", "Bringing to front2: ${v.tag}")
                         v.requestLayout()
                         v.invalidate()
+                        v.post {
+                            updateTopChildView() // Отложить обновление до завершения UI операций
+                        }
+                        Log.d("EmojiButtonManager", "Bringing to front3: ${v.tag}")
                         true
                     }
 
@@ -261,6 +280,12 @@ class EmojiButtonManager(
         }
 
         mainLayout.addView(currentEmojiImageView)
+    }
+
+    private fun updateTopChildView() {
+        // Ensure topChildView is updated after any changes
+        topChildView = getTopChildView()
+        Log.d("EmojiButtonManager", "Updated top child view: ${topChildView?.tag}")
     }
 
     fun toggleEmojiButtons() {
