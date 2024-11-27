@@ -36,6 +36,7 @@ class EmojiButtonManager(
     private val path = Path()
     private var firstFinger: Pair<Float, Float>? = null
     private var secondFinger: Pair<Float, Float>? = null
+    private var topChildView: View? = null // Ссылка на верхний элемент
 
     init {
         emojiButtons = List(5) { index ->
@@ -93,6 +94,9 @@ class EmojiButtonManager(
                 } else if (event.pointerCount == 2) {
                     firstFinger = Pair(event.getX(0), event.getY(0))
                     secondFinger = Pair(event.getX(1), event.getY(1))
+
+                    // Сохраняем ссылку на верхний childView
+                    topChildView = getTopChildView()
                 }
                 drawingView.invalidate() // Перерисовываем
             }
@@ -108,8 +112,20 @@ class EmojiButtonManager(
         }
     }
 
+    private fun getTopChildView(): View? {
+        var topView: View? = null
+        for (i in 0 until mainLayout.childCount) {
+            val child = mainLayout.getChildAt(i)
+            if (topView == null || child.z > topView.z) {
+                topView = child
+            }
+        }
+        return topView
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     private fun addEmojiToCenter(index: Int) {
+
         val emojiResId = when (index) {
             0 -> R.drawable.ic_green
             1 -> R.drawable.ic_grin
