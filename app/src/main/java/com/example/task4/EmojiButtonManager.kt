@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
@@ -22,9 +23,8 @@ class EmojiButtonManager(
 ) {
     private val emojiButtons: List<Button>
     private var isExpanded = false
-    private var currentEmojiImageView: ImageView? = null // Ссылка на текущее изображение эмодзи
+    private var currentEmojiImageView: ImageView? = null
 
-    // Для рисования кольца и линии
     private val ringPaint = Paint().apply {
         color = context.resources.getColor(R.color.colorAccent)
         style = Paint.Style.STROKE
@@ -34,13 +34,15 @@ class EmojiButtonManager(
         color = context.resources.getColor(R.color.colorPrimary)
         style = Paint.Style.STROKE
         strokeWidth = 4f
-        pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 5f), 0f) // Пунктирная линия
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 5f), 0f)
     }
     private val path = Path()
     private var firstFinger: Pair<Float, Float>? = null
     private var secondFinger: Pair<Float, Float>? = null
-    private var topChildView: View? = null // Ссылка на верхний элемент
-    private var initialDistance: Float = 0f // Начальное расстояние между пальцами
+    private var topChildView: View? = null
+    private var initialDistance: Float = 0f
+    private var initialScaleX: Float = 1f
+    private var initialScaleY: Float = 1f
 
     init {
         emojiButtons = List(5) { index ->
@@ -55,75 +57,60 @@ class EmojiButtonManager(
                         else -> 0
                     }
                 )
-                layoutParams = FrameLayout.LayoutParams(
-                    buttonSize,
-                    buttonSize
-                ).apply {
+                layoutParams = FrameLayout.LayoutParams(buttonSize, buttonSize).apply {
                     gravity = android.view.Gravity.BOTTOM or android.view.Gravity.END
-                    setMargins(16, 16, 16, 16) // Устанавливаем отступы для кнопок эмодзи
+                    setMargins(16, 16, 16, 16)
                 }
                 visibility = View.GONE
-
-                // Устанавливаем обработчик клика для добавления эмодзи
                 setOnClickListener {
                     addEmojiToCenter(index)
                 }
             }.also { button ->
-                // Добавляем каждую кнопку в основной layout
                 mainLayout.addView(button)
             }
         }
 
-        // Добавляем кастомный View для рисования
         val drawingView = DrawingView(context)
         mainLayout.addView(drawingView)
 
-        // Устанавливаем обработчик касаний на основной layout
         mainLayout.setOnTouchListener { _, event ->
             handleTouch(event, drawingView)
             true
         }
 
-        // Добавляем кнопку для очистки вью
         addClearButton()
     }
 
     private fun addClearButton() {
         val clearButton = Button(context).apply {
             setBackgroundResource(R.drawable.ic_cry)
-            layoutParams = FrameLayout.LayoutParams(
-                buttonSize,
-                buttonSize
-            ).apply {
+            layoutParams = FrameLayout.LayoutParams(buttonSize, buttonSize).apply {
                 gravity = android.view.Gravity.BOTTOM or android.view.Gravity.START
-                setMargins(16, 16, 0, 16) // Устанавливаем отступы для кнопки очистки
+                setMargins(16, 16, 0, 16)
             }
-            // Устанавливаем обработчик клика для очистки
             setOnClickListener {
                 clearAllEmojis()
             }
         }
-
-        // Добавляем кнопку очистки в основной layout
         mainLayout.addView(clearButton)
     }
 
     private fun clearAllEmojis() {
-        // Удаляем все ImageView, которые были добавлены
         for (i in mainLayout.childCount - 1 downTo 0) {
             val child = mainLayout.getChildAt(i)
             if (child is ImageView) {
                 mainLayout.removeView(child)
             }
         }
-        currentEmojiImageView = null // Сбрасываем ссылку на текущее изображение эмодзи
+        currentEmojiImageView = null
     }
 
     private fun handleTouch(event: MotionEvent, drawingView: DrawingView) {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 firstFinger = Pair(event.x, event.y)
-                drawingView.invalidate() // Перерисовываем
+                updateCurrentEmojiImageView(event.x, event.y)
+                drawingView.invalidate()
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -133,28 +120,72 @@ class EmojiButtonManager(
                     firstFinger = Pair(event.getX(0), event.getY(0))
                     secondFinger = Pair(event.getX(1), event.getY(1))
 
-                    // Сохраняем ссылку на верхний childView
                     topChildView = getTopChildView()
 
-                    // Вычисляем расстояние между пальцами
-                    val distance = calculateDistance(firstFinger!!, secondFinger!!)
-                    if (initialDistance == 0f) {
-                        initialDistance = distance // Сохраняем начальное расстояние
-                    } else {
-                        adjustTopViewScale(distance)
+                    if (isViewBetweenFingers(topChildView)) {
+                        val distance = calculateDistance(firstFinger!!, secondFinger!!)
+                        if (initialDistance == 0f) {
+                            initialDistance = distance
+                            // Store the initial scale of the top view
+                            initialScaleX = topChildView?.scaleX ?: 1f
+                            initialScaleY = topChildView?.scaleY ?: 1f
+                        } else {
+                            adjustTopViewScale(distance)
+                        }
                     }
                 }
-                drawingView.invalidate() // Перерисовываем
+                updateCurrentEmojiImageView(event.x, event.y)
+                drawingView.invalidate()
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 if (event.pointerCount == 1) {
                     firstFinger = null
-                    initialDistance = 0f // Сброс начального расстояния
+                    initialDistance = 0f
                 } else if (event.pointerCount == 2) {
                     secondFinger = null
                 }
-                drawingView.invalidate() // Перерисовываем
+                drawingView.invalidate()
+            }
+        }
+    }
+
+    private fun isViewBetweenFingers(view: View?): Boolean {
+        if (view == null || firstFinger == null || secondFinger == null) return false
+
+        val rect = RectF(view.x, view.y, view.x + view.width, view.y + view.height)
+        val lineStart = firstFinger!!
+        val lineEnd = secondFinger!!
+
+        return rect.intersects(
+            minOf(lineStart.first, lineEnd.first),
+            minOf(lineStart.second, lineEnd.second),
+            maxOf(lineStart.first, lineEnd.first),
+            maxOf(lineStart.second, lineEnd.second)
+        )
+    }
+
+    private fun adjustTopViewScale(currentDistance: Float) {
+        topChildView?.let { view ->
+            val scaleFactor = currentDistance / initialDistance
+            val newScaleX = (initialScaleX * scaleFactor).coerceIn(0.5f, 6f)
+            val newScaleY = (initialScaleY * scaleFactor).coerceIn(0.5f, 6f)
+
+            view.scaleX = newScaleX
+            view.scaleY = newScaleY
+        }
+    }
+
+    private fun updateCurrentEmojiImageView(x: Float, y: Float) {
+        for (i in 0 until mainLayout.childCount) {
+            val child = mainLayout.getChildAt(i)
+            if (child is ImageView && child != currentEmojiImageView) {
+                if (x >= child.x && x <= child.x + child.width && y >= child.y && y <= child.y + child.height) {
+                    if (child.tag != "ic_devil") {
+                        currentEmojiImageView = child
+                    }
+                    break
+                }
             }
         }
     }
@@ -174,19 +205,6 @@ class EmojiButtonManager(
         return sqrt((point2.first - point1.first).pow(2) + (point2.second - point1.second).pow(2))
     }
 
-    private fun adjustTopViewScale(currentDistance: Float) {
-        topChildView?.let { view ->
-            // Вычисляем новый масштаб на основе изменения расстояния между пальцами
-            val scaleFactor = currentDistance / initialDistance
-            val newScaleX = (view.scaleX * scaleFactor).coerceIn(0.5f, 6f)
-            val newScaleY = (view.scaleY * scaleFactor).coerceIn(0.5f, 6f)
-
-            // Применяем новый масштаб к верхнему элементу
-            view.scaleX = newScaleX
-            view.scaleY = newScaleY
-        }
-    }
-
     @SuppressLint("ClickableViewAccessibility")
     private fun addEmojiToCenter(index: Int) {
         val emojiResId = when (index) {
@@ -198,35 +216,31 @@ class EmojiButtonManager(
             else -> return
         }
 
-        // Создаем ImageView для эмодзи
         currentEmojiImageView = ImageView(context).apply {
             setImageResource(emojiResId)
             layoutParams = FrameLayout.LayoutParams(160, 160).apply {
-                gravity = android.view.Gravity.CENTER // Центрируем изображение
+                gravity = android.view.Gravity.CENTER
             }
-            setBackgroundColor(context.resources.getColor(R.color.transparent)) // Устанавливаем прозрачный фон
+            setBackgroundColor(context.resources.getColor(R.color.transparent))
+            tag = if (emojiResId == R.drawable.ic_devil) "ic_devil" else "emoji"
 
-            // Устанавливаем OnTouchListener для перетаскивания
             setOnTouchListener { v, event ->
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
-                        // Поднимаем вью над другими элементами
                         v.bringToFront()
-                        v.z = 6f // Устанавливаем Z-позицию
-                        v.requestLayout() // Обновляем расположение вью
-                        v.invalidate() // Обновляем отображение
+                        v.z = 6f
+                        v.requestLayout()
+                        v.invalidate()
                         true
                     }
 
                     MotionEvent.ACTION_MOVE -> {
-                        // Двигаем вью вслед за пальцем
                         v.x = event.rawX - (v.width / 2)
                         v.y = event.rawY - (v.height / 2)
                         true
                     }
 
                     MotionEvent.ACTION_UP -> {
-                        // Можно добавить логику при отпускании пальца, если нужно
                         true
                     }
 
@@ -235,7 +249,6 @@ class EmojiButtonManager(
             }
         }
 
-        // Добавляем ImageView в центр mainLayout
         mainLayout.addView(currentEmojiImageView)
     }
 
@@ -251,13 +264,13 @@ class EmojiButtonManager(
     private fun showEmojiButtons() {
         emojiButtons.forEachIndexed { index, button ->
             button.visibility = View.VISIBLE
-            button.translationY = 0f // Начальная позиция под кнопкой
-            button.alpha = 0f // Начальная прозрачность
+            button.translationY = 0f
+            button.alpha = 0f
             button.animate()
-                .translationY((-(index + 1) * (buttonSize + buttonSpacing)).toFloat()) // Фиксированное расстояние между кнопками
+                .translationY((-(index + 1) * (buttonSize + buttonSpacing)).toFloat())
                 .alpha(1f)
                 .setDuration(300)
-                .setStartDelay(index * 50L) // Задержка для эффекта "выезда"
+                .setStartDelay(index * 50L)
                 .start()
         }
     }
@@ -265,32 +278,28 @@ class EmojiButtonManager(
     private fun hideEmojiButtons() {
         emojiButtons.forEachIndexed { index, button ->
             button.animate()
-                .translationY(0f) // Возвращаем на место
+                .translationY(0f)
                 .alpha(0f)
                 .setDuration(300)
-                .setStartDelay(index * 50L) // Задержка для эффекта "опускания"
+                .setStartDelay(index * 50L)
                 .withEndAction {
-                    button.visibility = View.GONE // Скрываем кнопку после анимации
+                    button.visibility = View.GONE
                 }
                 .start()
         }
     }
 
-    // Класс для кастомного View, который будет рисовать кольца и линии
     inner class DrawingView(context: Context) : View(context) {
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
 
             firstFinger?.let { finger1 ->
-                // Рисуем кольцо вокруг первого пальца
                 canvas.drawCircle(finger1.first, finger1.second, 50f, ringPaint)
             }
 
             secondFinger?.let { finger2 ->
-                // Рисуем кольцо вокруг второго пальца
                 canvas.drawCircle(finger2.first, finger2.second, 50f, ringPaint)
 
-                // Рисуем линию между пальцами
                 path.reset()
                 path.moveTo(firstFinger!!.first, firstFinger!!.second)
                 path.lineTo(finger2.first, finger2.second)
