@@ -21,14 +21,16 @@ class EmojiButtonManager(
     init {
         emojiButtons = List(5) { index ->
             Button(context).apply {
-                setBackgroundResource(when (index) {
-                    0 -> R.drawable.ic_green
-                    1 -> R.drawable.ic_grin
-                    2 -> R.drawable.ic_smile
-                    3 -> R.drawable.ic_tongue
-                    4 -> R.drawable.ic_blue
-                    else -> 0
-                })
+                setBackgroundResource(
+                    when (index) {
+                        0 -> R.drawable.ic_green
+                        1 -> R.drawable.ic_grin
+                        2 -> R.drawable.ic_smile
+                        3 -> R.drawable.ic_tongue
+                        4 -> R.drawable.ic_blue
+                        else -> 0
+                    }
+                )
                 layoutParams = FrameLayout.LayoutParams(
                     buttonSize,
                     buttonSize
@@ -71,7 +73,7 @@ class EmojiButtonManager(
             layoutParams = FrameLayout.LayoutParams(160, 160).apply {
                 gravity = android.view.Gravity.CENTER // Центрируем изображение
             }
-            setBackgroundColor(0x00FFFFFF) // Устанавливаем прозрачный фон
+            setBackgroundColor(resources.getColor(R.color.transparent)) // Устанавливаем прозрачный фон
 
             // Устанавливаем OnTouchListener для перетаскивания
             setOnTouchListener { v, event ->
@@ -84,16 +86,19 @@ class EmojiButtonManager(
                         v.invalidate() // Обновляем отображение
                         true
                     }
+
                     MotionEvent.ACTION_MOVE -> {
                         // Двигаем вью вслед за пальцем
                         v.x = event.rawX - (v.width / 2)
                         v.y = event.rawY - (v.height / 2)
                         true
                     }
+
                     MotionEvent.ACTION_UP -> {
                         // Можно добавить логику при отпускании пальца, если нужно
                         true
                     }
+
                     else -> false
                 }
             }
