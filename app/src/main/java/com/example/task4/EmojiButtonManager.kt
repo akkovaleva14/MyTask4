@@ -10,7 +10,10 @@ import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
+import kotlin.math.pow
+import kotlin.math.sqrt
 
+@SuppressLint("ClickableViewAccessibility")
 class EmojiButtonManager(
     private val context: Context,
     private val mainLayout: FrameLayout,
@@ -37,6 +40,7 @@ class EmojiButtonManager(
     private var firstFinger: Pair<Float, Float>? = null
     private var secondFinger: Pair<Float, Float>? = null
     private var topChildView: View? = null // Ссылка на верхний элемент
+    private var initialDistance: Float = 0f // Начальное расстояние между пальцами
 
     init {
         emojiButtons = List(5) { index ->
@@ -79,6 +83,40 @@ class EmojiButtonManager(
             handleTouch(event, drawingView)
             true
         }
+
+        // Добавляем кнопку для очистки вью
+        addClearButton()
+    }
+
+    private fun addClearButton() {
+        val clearButton = Button(context).apply {
+            setBackgroundResource(R.drawable.ic_cry)
+            layoutParams = FrameLayout.LayoutParams(
+                buttonSize,
+                buttonSize
+            ).apply {
+                gravity = android.view.Gravity.BOTTOM or android.view.Gravity.START
+                setMargins(16, 16, 0, 16) // Устанавливаем отступы для кнопки очистки
+            }
+            // Устанавливаем обработчик клика для очистки
+            setOnClickListener {
+                clearAllEmojis()
+            }
+        }
+
+        // Добавляем кнопку очистки в основной layout
+        mainLayout.addView(clearButton)
+    }
+
+    private fun clearAllEmojis() {
+        // Удаляем все ImageView, которые были добавлены
+        for (i in mainLayout.childCount - 1 downTo 0) {
+            val child = mainLayout.getChildAt(i)
+            if (child is ImageView) {
+                mainLayout.removeView(child)
+            }
+        }
+        currentEmojiImageView = null // Сбрасываем ссылку на текущее изображение эмодзи
     }
 
     private fun handleTouch(event: MotionEvent, drawingView: DrawingView) {
@@ -97,6 +135,14 @@ class EmojiButtonManager(
 
                     // Сохраняем ссылку на верхний childView
                     topChildView = getTopChildView()
+
+                    // Вычисляем расстояние между пальцами
+                    val distance = calculateDistance(firstFinger!!, secondFinger!!)
+                    if (initialDistance == 0f) {
+                        initialDistance = distance // Сохраняем начальное расстояние
+                    } else {
+                        adjustTopViewScale(distance)
+                    }
                 }
                 drawingView.invalidate() // Перерисовываем
             }
@@ -104,6 +150,7 @@ class EmojiButtonManager(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 if (event.pointerCount == 1) {
                     firstFinger = null
+                    initialDistance = 0f // Сброс начального расстояния
                 } else if (event.pointerCount == 2) {
                     secondFinger = null
                 }
@@ -123,9 +170,25 @@ class EmojiButtonManager(
         return topView
     }
 
+    private fun calculateDistance(point1: Pair<Float, Float>, point2: Pair<Float, Float>): Float {
+        return sqrt((point2.first - point1.first).pow(2) + (point2.second - point1.second).pow(2))
+    }
+
+    private fun adjustTopViewScale(currentDistance: Float) {
+        topChildView?.let { view ->
+            // Вычисляем новый масштаб на основе изменения расстояния между пальцами
+            val scaleFactor = currentDistance / initialDistance
+            val newScaleX = (view.scaleX * scaleFactor).coerceIn(0.5f, 6f)
+            val newScaleY = (view.scaleY * scaleFactor).coerceIn(0.5f, 6f)
+
+            // Применяем новый масштаб к верхнему элементу
+            view.scaleX = newScaleX
+            view.scaleY = newScaleY
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     private fun addEmojiToCenter(index: Int) {
-
         val emojiResId = when (index) {
             0 -> R.drawable.ic_green
             1 -> R.drawable.ic_grin
