@@ -1,6 +1,8 @@
 package com.example.task4
 
+import android.annotation.SuppressLint
 import android.content.Context
+import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
@@ -47,6 +49,7 @@ class EmojiButtonManager(
         }
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun addEmojiToCenter(index: Int) {
         // Сначала удаляем предыдущее изображение, если оно существует
         currentEmojiImageView?.let {
@@ -65,9 +68,36 @@ class EmojiButtonManager(
         // Создаем ImageView для эмодзи
         currentEmojiImageView = ImageView(context).apply {
             setImageResource(emojiResId)
-            layoutParams = FrameLayout.LayoutParams(60, 60).apply {
+            layoutParams = FrameLayout.LayoutParams(160, 160).apply {
                 gravity = android.view.Gravity.CENTER // Центрируем изображение
             }
+            setBackgroundColor(0x00FFFFFF) // Устанавливаем прозрачный фон
+
+            // Устанавливаем OnTouchListener для перетаскивания
+            setOnTouchListener { v, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        // Поднимаем вью над другими элементами
+                        v.bringToFront()
+                        v.z = 6f // Устанавливаем Z-позицию
+                        v.requestLayout() // Обновляем расположение вью
+                        v.invalidate() // Обновляем отображение
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        // Двигаем вью вслед за пальцем
+                        v.x = event.rawX - (v.width / 2)
+                        v.y = event.rawY - (v.height / 2)
+                        true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        // Можно добавить логику при отпускании пальца, если нужно
+                        true
+                    }
+                    else -> false
+                }
+            }
+
         }
 
         // Добавляем ImageView в центр mainLayout

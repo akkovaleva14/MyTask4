@@ -7,9 +7,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.example.task4.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var mainLayout: FrameLayout
+    private lateinit var binding: ActivityMainBinding
     private lateinit var customButton: Button
     private lateinit var emojiButtonManager: EmojiButtonManager
 
@@ -19,13 +20,15 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContentView(R.layout.activity_main)
+        binding = ActivityMainBinding.inflate(layoutInflater) // Инициализация View Binding
+        setContentView(binding.root) // Устанавливаем корень из View Binding
 
-        mainLayout = findViewById(R.id.main)
+        // Инициализация основного layout
+        val mainLayout = binding.main
 
         // Создаем кастомную кнопку
         customButton = Button(this).apply {
-            setBackgroundResource(R.drawable.ic_devil) // Устанавливаем ic_devil на синюю кнопку
+            setBackgroundResource(R.drawable.ic_devil)
             layoutParams = FrameLayout.LayoutParams(
                 buttonSize,
                 buttonSize
@@ -35,7 +38,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Добавляем синюю кнопку в основной layout
+        // Добавляем стартовую кнопку в основной layout
         mainLayout.addView(customButton)
 
         // Инициализация EmojiButtonManager
