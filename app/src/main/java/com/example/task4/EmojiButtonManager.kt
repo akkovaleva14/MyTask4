@@ -2,6 +2,9 @@ package com.example.task4
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
@@ -17,6 +20,22 @@ class EmojiButtonManager(
     private val emojiButtons: List<Button>
     private var isExpanded = false
     private var currentEmojiImageView: ImageView? = null // Ссылка на текущее изображение эмодзи
+
+    // Для рисования кольца и линии
+    private val ringPaint = Paint().apply {
+        color = context.resources.getColor(R.color.colorAccent)
+        style = Paint.Style.STROKE
+        strokeWidth = 8f
+    }
+    private val linePaint = Paint().apply {
+        color = context.resources.getColor(R.color.colorPrimary)
+        style = Paint.Style.STROKE
+        strokeWidth = 4f
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 5f), 0f) // Пунктирная линия
+    }
+    private val path = Path()
+    private var firstFinger: Pair<Float, Float>? = null
+    private var secondFinger: Pair<Float, Float>? = null
 
     init {
         emojiButtons = List(5) { index ->
@@ -49,15 +68,48 @@ class EmojiButtonManager(
                 mainLayout.addView(button)
             }
         }
+
+        // Добавляем кастомный View для рисования
+        val drawingView = DrawingView(context)
+        mainLayout.addView(drawingView)
+
+        // Устанавливаем обработчик касаний на основной layout
+        mainLayout.setOnTouchListener { _, event ->
+            handleTouch(event, drawingView)
+            true
+        }
+    }
+
+    private fun handleTouch(event: MotionEvent, drawingView: DrawingView) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                firstFinger = Pair(event.x, event.y)
+                drawingView.invalidate() // Перерисовываем
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                if (event.pointerCount == 1) {
+                    firstFinger = Pair(event.x, event.y)
+                } else if (event.pointerCount == 2) {
+                    firstFinger = Pair(event.getX(0), event.getY(0))
+                    secondFinger = Pair(event.getX(1), event.getY(1))
+                }
+                drawingView.invalidate() // Перерисовываем
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                if (event.pointerCount == 1) {
+                    firstFinger = null
+                } else if (event.pointerCount == 2) {
+                    secondFinger = null
+                }
+                drawingView.invalidate() // Перерисовываем
+            }
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
     private fun addEmojiToCenter(index: Int) {
-        // Сначала удаляем предыдущее изображение, если оно существует
-        currentEmojiImageView?.let {
-            mainLayout.removeView(it)
-        }
-
         val emojiResId = when (index) {
             0 -> R.drawable.ic_green
             1 -> R.drawable.ic_grin
@@ -73,7 +125,7 @@ class EmojiButtonManager(
             layoutParams = FrameLayout.LayoutParams(160, 160).apply {
                 gravity = android.view.Gravity.CENTER // Центрируем изображение
             }
-            setBackgroundColor(resources.getColor(R.color.transparent)) // Устанавливаем прозрачный фон
+            setBackgroundColor(context.resources.getColor(R.color.transparent)) // Устанавливаем прозрачный фон
 
             // Устанавливаем OnTouchListener для перетаскивания
             setOnTouchListener { v, event ->
@@ -102,7 +154,6 @@ class EmojiButtonManager(
                     else -> false
                 }
             }
-
         }
 
         // Добавляем ImageView в центр mainLayout
@@ -143,6 +194,29 @@ class EmojiButtonManager(
                     button.visibility = View.GONE // Скрываем кнопку после анимации
                 }
                 .start()
+        }
+    }
+
+    // Класс для кастомного View, который будет рисовать кольца и линии
+    inner class DrawingView(context: Context) : View(context) {
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+
+            firstFinger?.let { finger1 ->
+                // Рисуем кольцо вокруг первого пальца
+                canvas.drawCircle(finger1.first, finger1.second, 50f, ringPaint)
+            }
+
+            secondFinger?.let { finger2 ->
+                // Рисуем кольцо вокруг второго пальца
+                canvas.drawCircle(finger2.first, finger2.second, 50f, ringPaint)
+
+                // Рисуем линию между пальцами
+                path.reset()
+                path.moveTo(firstFinger!!.first, firstFinger!!.second)
+                path.lineTo(finger2.first, finger2.second)
+                canvas.drawPath(path, linePaint)
+            }
         }
     }
 }
