@@ -36,7 +36,7 @@ class EmojiButtonManager(
                     buttonSize
                 ).apply {
                     gravity = android.view.Gravity.BOTTOM or android.view.Gravity.END
-                    setMargins(8, 8, 8, 8) // Устанавливаем отступы для кнопок эмодзи
+                    setMargins(16, 16, 16, 16) // Устанавливаем отступы для кнопок эмодзи
                 }
                 visibility = View.GONE
 
