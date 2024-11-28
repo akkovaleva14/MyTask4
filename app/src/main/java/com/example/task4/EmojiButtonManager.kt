@@ -148,10 +148,6 @@ class EmojiButtonManager(
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount == 1) {
                     firstFinger = Pair(event.x, event.y)
-//                    viewToMove?.let {
-//                        it.translationX = event.x - firstFingerDownX
-//                        it.translationY = event.y - firstFingerDownY
-//                    }
                     viewToMove?.let {
                         // Получаем текущие координаты viewToMove
                         val currentX = it.x
@@ -278,7 +274,6 @@ class EmojiButtonManager(
         for (i in mainLayout.childCount - 1 downTo 0) {
             val child = mainLayout.getChildAt(i)
             if (child.visibility == View.VISIBLE) {
-                Log.d("getTopChildView", "Top view found: $child, z=${child.z}")
                 return child
             }
         }
