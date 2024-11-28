@@ -5,7 +5,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.Rect
 import android.graphics.RectF
 import android.util.Log
 import android.view.MotionEvent
@@ -132,9 +131,6 @@ class EmojiButtonManager(
                     topChildView = getTopChildView()
 
                     if (topChildView != null && isViewBetweenFingers(topChildView)) {
-                        // Обновляем порядок наложения для верхней вью
-//                        topChildView?.z = 6f  // Устанавливаем значение z для этой вью
-
                         // Вычисляем начальную дистанцию между пальцами
                         initialDistance = calculateDistance(firstFinger!!, secondFinger!!)
                         // Сохраняем начальные значения масштаба
@@ -144,10 +140,6 @@ class EmojiButtonManager(
                     Log.d(
                         "HandleTouch",
                         "ACTION_POINTER_DOWN: firstFinger=$firstFinger, secondFinger=$secondFinger"
-                    )
-                    Log.d(
-                        "HandleTouch",
-                        "Top view detected: ${topChildView != null}, initialDistance=$initialDistance"
                     )
                 }
                 drawingView.invalidate()
@@ -179,7 +171,6 @@ class EmojiButtonManager(
                     firstFinger = Pair(event.getX(0), event.getY(0))
                     secondFinger = Pair(event.getX(1), event.getY(1))
                     topChildView = getTopChildView()
-
                     // Если два пальца на экране и вью между ними, обновляем масштаб
                     if (topChildView != null && isViewBetweenFingers(topChildView)) {
                         val distance = calculateDistance(firstFinger!!, secondFinger!!)
@@ -229,6 +220,10 @@ class EmojiButtonManager(
             // Применение масштаба к вью
             view.scaleX = newScaleX
             view.scaleY = newScaleY
+            Log.d(
+                "EmojiButtonManager",
+                "adjustTopViewScale: scaleFactor=$scaleFactor, newScaleX=$newScaleX, newScaleY=$newScaleY"
+            )
         }
     }
 
@@ -239,12 +234,21 @@ class EmojiButtonManager(
         val lineStart = firstFinger!!
         val lineEnd = secondFinger!!
 
-        return rect.intersects(
+        Log.d(
+            "EmojiButtonManager",
+            "isViewBetweenFingers: firstFinger=$firstFinger, secondFinger=$secondFinger"
+        )
+        Log.d("EmojiButtonManager", "isViewBetweenFingers: rect=$rect")
+
+        // Проверка пересечения линии между пальцами с границами вью
+        val intersects = rect.intersects(
             minOf(lineStart.first, lineEnd.first),
             minOf(lineStart.second, lineEnd.second),
             maxOf(lineStart.first, lineEnd.first),
             maxOf(lineStart.second, lineEnd.second)
         )
+        Log.d("EmojiButtonManager", "isViewBetweenFingers: intersects=$intersects")
+        return intersects
     }
 
     private fun updateCurrentEmojiImageView(x: Float, y: Float) {
@@ -271,14 +275,15 @@ class EmojiButtonManager(
     }
 
     private fun getTopChildView(): View? {
-        var topView: View? = null
-        for (i in 0 until mainLayout.childCount) {
+        for (i in mainLayout.childCount - 1 downTo 0) {
             val child = mainLayout.getChildAt(i)
-            if (topView == null || child.z > topView.z) {
-                topView = child
+            if (child.visibility == View.VISIBLE) {
+                Log.d("getTopChildView", "Top view found: $child, z=${child.z}")
+                return child
             }
         }
-        return topView
+        Log.d("getTopChildView", "No visible top view found")
+        return null
     }
 
     private fun calculateDistance(point1: Pair<Float, Float>, point2: Pair<Float, Float>): Float {
@@ -295,43 +300,12 @@ class EmojiButtonManager(
             4 -> R.drawable.ic_blue
             else -> return
         }
-
         val newEmojiView = ImageView(context).apply {
             setImageResource(emojiResId)
             layoutParams = FrameLayout.LayoutParams(160, 160).apply {
                 gravity = android.view.Gravity.CENTER
             }
             setBackgroundColor(context.resources.getColor(R.color.transparent))
-
-//            initialScaleX = scaleX
-//            initialScaleY = scaleY
-//            initialDistance = 0f
-
-//            setOnTouchListener { v, event ->
-//                when (event.action) {
-//                    MotionEvent.ACTION_DOWN -> {
-//                        v.bringToFront()
-//                        v.z = 6f
-//                        resetOtherViewsZ(v)
-//                        true
-//                    }
-//
-//                    MotionEvent.ACTION_MOVE -> {
-//                        if (event.pointerCount == 2) {
-//                            firstFinger = Pair(event.getX(0), event.getY(0))
-//                            secondFinger = Pair(event.getX(1), event.getY(1))
-//
-//                            val distance = calculateDistance(firstFinger!!, secondFinger!!)
-//                            adjustTopViewScale(distance)
-//                        }
-//                        v.x = event.x - v.width / 2
-//                        v.y = event.y - v.height / 2
-//                        true
-//                    }
-//
-//                    else -> false
-//                }
-//            }
         }
         mainLayout.addView(newEmojiView)
     }
@@ -392,6 +366,7 @@ class EmojiButtonManager(
                     "onDraw: Drawing circle for 2d finger at (${finger2.first}, ${finger2.second})"
                 )
 
+                // Рисуем пунктирную линию между двумя пальцами
                 path.reset()
                 path.moveTo(firstFinger!!.first, firstFinger!!.second)
                 path.lineTo(finger2.first, finger2.second)
