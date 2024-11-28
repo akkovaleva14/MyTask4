@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.util.Log
 import android.view.MotionEvent
@@ -12,6 +13,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
+import androidx.core.view.children
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -24,7 +26,7 @@ class EmojiButtonManager(
 ) {
     private val emojiButtons: List<Button>
     private var isExpanded = false
-    private var currentEmojiImageView: ImageView? = null
+    private var viewToMove: ImageView? = null
 
     private val ringPaint = Paint().apply {
         color = context.resources.getColor(R.color.colorAccent)
@@ -46,7 +48,6 @@ class EmojiButtonManager(
     private var initialScaleY: Float = 1f
 
     init {
-        Log.d("EmojiButtonManager", "init")
         emojiButtons = List(5) { index ->
             Button(context).apply {
                 setBackgroundResource(
@@ -104,51 +105,130 @@ class EmojiButtonManager(
                 mainLayout.removeView(child)
             }
         }
-        currentEmojiImageView = null
+        viewToMove = null
     }
 
+    private var firstFingerDownX = 0f
+    private var firstFingerDownY = 0f
+
+    @SuppressLint("ClickableViewAccessibility")
     private fun handleTouch(event: MotionEvent, drawingView: DrawingView) {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // Первый палец касается экрана.
+                firstFingerDownX = event.x
+                firstFingerDownY = event.y
                 firstFinger = Pair(event.x, event.y)
                 updateCurrentEmojiImageView(event.x, event.y)
+                Log.d("HandleTouch", "ACTION_DOWN: x=${event.x}, y=${event.y}")
+            }
+
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                // Второй палец касается экрана
+                if (event.pointerCount == 2) {
+                    firstFinger = Pair(event.getX(0), event.getY(0))
+                    secondFinger = Pair(event.getX(1), event.getY(1))
+
+                    topChildView = getTopChildView()
+
+                    if (topChildView != null && isViewBetweenFingers(topChildView)) {
+                        // Обновляем порядок наложения для верхней вью
+//                        topChildView?.z = 6f  // Устанавливаем значение z для этой вью
+
+                        // Вычисляем начальную дистанцию между пальцами
+                        initialDistance = calculateDistance(firstFinger!!, secondFinger!!)
+                        // Сохраняем начальные значения масштаба
+                        initialScaleX = topChildView?.scaleX ?: 1f
+                        initialScaleY = topChildView?.scaleY ?: 1f
+                    }
+                    Log.d(
+                        "HandleTouch",
+                        "ACTION_POINTER_DOWN: firstFinger=$firstFinger, secondFinger=$secondFinger"
+                    )
+                    Log.d(
+                        "HandleTouch",
+                        "Top view detected: ${topChildView != null}, initialDistance=$initialDistance"
+                    )
+                }
                 drawingView.invalidate()
             }
 
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount == 1) {
                     firstFinger = Pair(event.x, event.y)
+//                    viewToMove?.let {
+//                        it.translationX = event.x - firstFingerDownX
+//                        it.translationY = event.y - firstFingerDownY
+//                    }
+                    viewToMove?.let {
+                        // Получаем текущие координаты viewToMove
+                        val currentX = it.x
+                        val currentY = it.y
+
+                        // Обновляем координаты с учетом начальных значений
+                        it.x = currentX + (event.x - firstFingerDownX)
+                        it.y = currentY + (event.y - firstFingerDownY)
+
+                        // Обновляем начальные координаты для следующего движения
+                        firstFingerDownX = event.x
+                        firstFingerDownY = event.y
+                    }
+                    Log.d("HandleTouch", "ACTION_MOVE (single touch): x=${event.x}, y=${event.y}")
+
                 } else if (event.pointerCount == 2) {
                     firstFinger = Pair(event.getX(0), event.getY(0))
                     secondFinger = Pair(event.getX(1), event.getY(1))
-
                     topChildView = getTopChildView()
 
-                    if (isViewBetweenFingers(topChildView)) {
+                    // Если два пальца на экране и вью между ними, обновляем масштаб
+                    if (topChildView != null && isViewBetweenFingers(topChildView)) {
                         val distance = calculateDistance(firstFinger!!, secondFinger!!)
-                        if (initialDistance == 0f) {
-                            initialDistance = distance
-                            // Store the initial scale of the top view
-                            initialScaleX = topChildView?.scaleX ?: 1f
-                            initialScaleY = topChildView?.scaleY ?: 1f
-                        } else {
+                        if (initialDistance > 0f) {
                             adjustTopViewScale(distance)
                         }
+                        Log.d(
+                            "HandleTouch",
+                            "ACTION_MOVE (multi-touch): firstFinger=$firstFinger, secondFinger=$secondFinger, distance=$distance"
+                        )
                     }
                 }
-                updateCurrentEmojiImageView(event.x, event.y)
                 drawingView.invalidate()
             }
 
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                // Окончание взаимодействия с пальцами
                 if (event.pointerCount == 1) {
                     firstFinger = null
                     initialDistance = 0f
+                    Log.d(
+                        "HandleTouch",
+                        "ACTION_UP or ACTION_CANCEL (single touch): x=${event.x}, y=${event.y}"
+                    )
                 } else if (event.pointerCount == 2) {
                     secondFinger = null
+                    Log.d(
+                        "HandleTouch",
+                        "ACTION_POINTER_UP or ACTION_CANCEL (multi-touch): second finger lifted"
+                    )
                 }
+                firstFingerDownX = 0f
+                firstFingerDownY = 0f
+                viewToMove = null
                 drawingView.invalidate()
             }
+        }
+    }
+
+    private fun adjustTopViewScale(currentDistance: Float) {
+        topChildView?.let { view ->
+            // Вычисление коэффициента масштаба
+            val scaleFactor = currentDistance / initialDistance
+            val newScaleX = (initialScaleX * scaleFactor).coerceIn(0.5f, 6f)
+            val newScaleY = (initialScaleY * scaleFactor).coerceIn(0.5f, 6f)
+
+            // Применение масштаба к вью
+            view.scaleX = newScaleX
+            view.scaleY = newScaleY
         }
     }
 
@@ -167,26 +247,24 @@ class EmojiButtonManager(
         )
     }
 
-    private fun adjustTopViewScale(currentDistance: Float) {
-        topChildView?.let { view ->
-            val scaleFactor = currentDistance / initialDistance
-            val newScaleX = (initialScaleX * scaleFactor).coerceIn(0.5f, 6f)
-            val newScaleY = (initialScaleY * scaleFactor).coerceIn(0.5f, 6f)
-
-            view.scaleX = newScaleX
-            view.scaleY = newScaleY
-        }
-    }
-
     private fun updateCurrentEmojiImageView(x: Float, y: Float) {
-        for (i in 0 until mainLayout.childCount) {
-            val child = mainLayout.getChildAt(i)
-            if (child is ImageView && child != currentEmojiImageView) {
-                if (x >= child.x && x <= child.x + child.width && y >= child.y && y <= child.y + child.height) {
-                    if (child.tag != "ic_devil") {
-                        currentEmojiImageView = child
-                    }
-                    break
+        mainLayout.children.forEach { child ->
+            if (child is ImageView && child != viewToMove) {
+                Log.d(
+                    "EmojiButtonManager",
+                    "Child bounds: x=${child.x}, y=${child.y}, width=${child.width}, height=${child.height}"
+                )
+                Log.d("EmojiButtonManager", "Touch point: x=$x, y=$y")
+
+                if (x >= child.x && x <= child.x + child.width &&
+                    y >= child.y && y <= child.y + child.height
+                ) {
+                    // Устанавливаем выбранную иконку как верхнюю
+                    child.bringToFront()
+                    viewToMove = child
+                    // Обновляем отображение, чтобы изменения вступили в силу
+                    mainLayout.invalidate()
+                    return@forEach
                 }
             }
         }
@@ -194,21 +272,14 @@ class EmojiButtonManager(
 
     private fun getTopChildView(): View? {
         var topView: View? = null
-        var maxZIndex = -Float.MAX_VALUE // Start with a very low value to find the top view
-
         for (i in 0 until mainLayout.childCount) {
             val child = mainLayout.getChildAt(i)
-            // Compare the actual z-index of each child
-            if (child.z > maxZIndex) {
+            if (topView == null || child.z > topView.z) {
                 topView = child
-                maxZIndex = child.z
             }
         }
-
-        Log.d("EmojiButtonManager", "Top child view: ${topView?.tag}")
         return topView
     }
-
 
     private fun calculateDistance(point1: Pair<Float, Float>, point2: Pair<Float, Float>): Float {
         return sqrt((point2.first - point1.first).pow(2) + (point2.second - point1.second).pow(2))
@@ -225,67 +296,44 @@ class EmojiButtonManager(
             else -> return
         }
 
-        val emojiTag = when (index) {
-            0 -> "ic_green"
-            1 -> "ic_grin"
-            2 -> "ic_smile"
-            3 -> "ic_tongue"
-            4 -> "ic_blue"
-            else -> "unknown" // на случай, если индекс будет выходить за пределы
-        }
-
-        currentEmojiImageView = ImageView(context).apply {
+        val newEmojiView = ImageView(context).apply {
             setImageResource(emojiResId)
             layoutParams = FrameLayout.LayoutParams(160, 160).apply {
                 gravity = android.view.Gravity.CENTER
             }
             setBackgroundColor(context.resources.getColor(R.color.transparent))
-            tag = emojiTag
 
-            // Bring the emoji to front as soon as it's created
-            bringToFront() // Move it to the front before adding to the layout
-            z = 6f // Ensure it's on top in terms of z-index
+//            initialScaleX = scaleX
+//            initialScaleY = scaleY
+//            initialDistance = 0f
 
-            // Log the view being brought to the front
-            Log.d("EmojiButtonManager", "Bringing to front1: ${this.tag}")
-
-            setOnTouchListener { v, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        v.bringToFront()
-                        v.z = 6f
-                        Log.d("EmojiButtonManager", "Bringing to front2: ${v.tag}")
-                        v.requestLayout()
-                        v.invalidate()
-                        v.post {
-                            updateTopChildView() // Отложить обновление до завершения UI операций
-                        }
-                        Log.d("EmojiButtonManager", "Bringing to front3: ${v.tag}")
-                        true
-                    }
-
-                    MotionEvent.ACTION_MOVE -> {
-                        v.x = event.rawX - (v.width / 2)
-                        v.y = event.rawY - (v.height / 2)
-                        true
-                    }
-
-                    MotionEvent.ACTION_UP -> {
-                        true
-                    }
-
-                    else -> false
-                }
-            }
+//            setOnTouchListener { v, event ->
+//                when (event.action) {
+//                    MotionEvent.ACTION_DOWN -> {
+//                        v.bringToFront()
+//                        v.z = 6f
+//                        resetOtherViewsZ(v)
+//                        true
+//                    }
+//
+//                    MotionEvent.ACTION_MOVE -> {
+//                        if (event.pointerCount == 2) {
+//                            firstFinger = Pair(event.getX(0), event.getY(0))
+//                            secondFinger = Pair(event.getX(1), event.getY(1))
+//
+//                            val distance = calculateDistance(firstFinger!!, secondFinger!!)
+//                            adjustTopViewScale(distance)
+//                        }
+//                        v.x = event.x - v.width / 2
+//                        v.y = event.y - v.height / 2
+//                        true
+//                    }
+//
+//                    else -> false
+//                }
+//            }
         }
-
-        mainLayout.addView(currentEmojiImageView)
-    }
-
-    private fun updateTopChildView() {
-        // Ensure topChildView is updated after any changes
-        topChildView = getTopChildView()
-        Log.d("EmojiButtonManager", "Updated top child view: ${topChildView?.tag}")
+        mainLayout.addView(newEmojiView)
     }
 
     fun toggleEmojiButtons() {
@@ -331,16 +379,29 @@ class EmojiButtonManager(
 
             firstFinger?.let { finger1 ->
                 canvas.drawCircle(finger1.first, finger1.second, 50f, ringPaint)
+                Log.d(
+                    "EmojiButtonManager",
+                    "onDraw: Drawing circle for 1st finger at (${finger1.first}, ${finger1.second})"
+                )
             }
 
             secondFinger?.let { finger2 ->
                 canvas.drawCircle(finger2.first, finger2.second, 50f, ringPaint)
+                Log.d(
+                    "EmojiButtonManager",
+                    "onDraw: Drawing circle for 2d finger at (${finger2.first}, ${finger2.second})"
+                )
 
                 path.reset()
                 path.moveTo(firstFinger!!.first, firstFinger!!.second)
                 path.lineTo(finger2.first, finger2.second)
                 canvas.drawPath(path, linePaint)
+                Log.d(
+                    "EmojiButtonManager",
+                    "onDraw: Drawing line between 1st finger (${firstFinger!!.first}, ${firstFinger!!.second}) and 2d finger (${finger2.first}, ${finger2.second})"
+                )
             }
         }
     }
 }
+
